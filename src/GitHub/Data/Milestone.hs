@@ -5,11 +5,11 @@
 --
 module GitHub.Data.Milestone where
 
-import GitHub.Data.Definitions
-import GitHub.Data.Id          (Id)
-import GitHub.Data.URL         (URL)
-import GitHub.Internal.Prelude
-import Prelude ()
+import           GitHub.Data.Definitions
+import           GitHub.Data.Id          (Id)
+import           GitHub.Data.URL         (URL)
+import           GitHub.Internal.Prelude
+import           Prelude                 ()
 
 data Milestone = Milestone
     { milestoneCreator      :: !SimpleUser
@@ -40,3 +40,26 @@ instance FromJSON Milestone where
         <*> o .: "url"
         <*> o .: "created_at"
         <*> o .: "state"
+
+data NewMilestone = NewMilestone
+    { newMilestoneTitle       :: !Text
+    , newMilestoneState       :: !Text
+    , newMilestoneDescription :: !(Maybe Text)
+    , newMilestoneDueOn       :: !(Maybe UTCTime)
+    }
+  deriving (Show, Data, Typeable, Eq, Ord, Generic)
+
+instance NFData NewMilestone where rnf = genericRnf
+instance Binary NewMilestone
+
+
+instance ToJSON NewMilestone where
+    toJSON (NewMilestone title state desc due) = object $ filter notNull
+        [ "title"       .= title
+        , "state"       .= state
+        , "description" .= desc
+        , "due_on"      .= due
+        ]
+      where
+        notNull (_, Null) = False
+        notNull (_, _)    = True

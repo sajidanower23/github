@@ -11,13 +11,15 @@ module GitHub.Endpoints.Issues.Milestones (
     milestonesR,
     milestone,
     milestoneR,
+    createMilestone,
+    createMilestoneR,
     module GitHub.Data,
     ) where
 
-import GitHub.Data
-import GitHub.Internal.Prelude
-import GitHub.Request
-import Prelude ()
+import           GitHub.Data
+import           GitHub.Internal.Prelude
+import           GitHub.Request
+import           Prelude                 ()
 
 -- | All milestones in the repo.
 --
@@ -50,3 +52,13 @@ milestone user repo mid =
 milestoneR :: Name Owner -> Name Repo -> Id Milestone -> Request k Milestone
 milestoneR user repo mid =
     query ["repos", toPathPart user, toPathPart repo, "milestones", toPathPart mid] []
+
+createMilestone :: Auth -> Name Owner -> Name Repo -> NewMilestone -> IO (Either Error Milestone)
+createMilestone auth user repo mst = executeRequest auth $ createMilestoneR user repo mst
+
+-- | Create a milestone.
+-- See <https://developer.github.com/v3/issues/milestones/#create-a-milestone>
+createMilestoneR :: Name Owner -> Name Repo -> NewMilestone -> Request 'RW Milestone
+createMilestoneR user repo =
+    command Post ["repos", toPathPart user, toPathPart repo, "milestones"] . encode
+
