@@ -68,7 +68,7 @@ addCollaborator
     -> Name Owner        -- ^ Repository owner
     -> Name Repo         -- ^ Repository name
     -> Name User         -- ^ Collaborator to add
-    -> IO (Either Error ())
+    -> IO (Either Error RepoInvitation)
 addCollaborator auth owner repo coll =
     executeRequest auth $ addCollaboratorR owner repo coll
 
@@ -78,6 +78,6 @@ addCollaboratorR
     :: Name Owner        -- ^ Repository owner
     -> Name Repo         -- ^ Repository name
     -> Name User         -- ^ Collaborator to add
-    -> Request 'RW ()
+    -> Request 'RW RepoInvitation
 addCollaboratorR owner repo coll =
-    command Put' ["repos", toPathPart owner, toPathPart repo, "collaborators", toPathPart coll] mempty
+    command Put ["repos", toPathPart owner, toPathPart repo, "collaborators", toPathPart coll] mempty
