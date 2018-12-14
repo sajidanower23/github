@@ -7,7 +7,8 @@
 -- <https://developer.github.com/v3/repos/invitations/>.
 module GitHub.Endpoints.Repos.Invitations (
     listInvitationsOnR,
-    acceptInvitationFromR
+    acceptInvitationFromR,
+    listInvitationsForR
     ) where
 
 import GitHub.Data
@@ -19,6 +20,10 @@ import Prelude ()
 listInvitationsOnR :: Name Owner -> Name Repo -> FetchCount -> Request k (Vector RepoInvitation)
 listInvitationsOnR user repo =
     pagedQuery ["repos", toPathPart user, toPathPart repo, "invitations"] []
+
+listInvitationsForR :: FetchCount -> Request k (Vector RepoInvitation)
+listInvitationsForR =
+    pagedQuery ["user", "repository_invitations"] []
 
 acceptInvitationFromR :: Id RepoInvitation -> Request 'RW ()
 acceptInvitationFromR invId =

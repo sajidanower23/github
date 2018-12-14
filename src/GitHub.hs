@@ -320,6 +320,7 @@ module GitHub (
 
     listInvitationsOnR,
     acceptInvitationFromR,
+    listInvitationsForR,
 
 
     -- * Search
