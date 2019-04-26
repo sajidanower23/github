@@ -25,6 +25,6 @@ listInvitationsForR :: FetchCount -> Request k (Vector RepoInvitation)
 listInvitationsForR =
     pagedQuery ["user", "repository_invitations"] []
 
-acceptInvitationFromR :: Id RepoInvitation -> Request 'RW ()
+acceptInvitationFromR :: Id RepoInvitation -> Request 'RW RepoInvitation
 acceptInvitationFromR invId =
     Command Patch ["user", "repository_invitations", toPathPart invId] mempty
