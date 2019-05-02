@@ -7,8 +7,8 @@
 -- <https://developer.github.com/v3/repos/invitations/>.
 module GitHub.Endpoints.Repos.Invitations (
     listInvitationsOnR,
-    acceptInvitationFromR,
-    listInvitationsForR
+    listInvitationsForR,
+    acceptInvitationFromR
     ) where
 
 import GitHub.Data
@@ -17,14 +17,19 @@ import Prelude ()
 
 -- | List open invitations of a repository
 -- See <https://developer.github.com/v3/repos/invitations/#list-invitations-for-a-repository>
-listInvitationsOnR :: Name Owner -> Name Repo -> FetchCount -> Request k (Vector RepoInvitation)
+listInvitationsOnR :: Name Owner -> Name Repo -> FetchCount -> GenRequest 'MtJSON k (Vector RepoInvitation)
 listInvitationsOnR user repo =
-    pagedQuery ["repos", toPathPart user, toPathPart repo, "invitations"] []
+    PagedQuery ["repos", toPathPart user, toPathPart repo, "invitations"] []
 
+-- | List a user's repository invitations
+-- See <https://developer.github.com/v3/repos/invitations/#list-a-users-repository-invitations>
 listInvitationsForR :: FetchCount -> Request k (Vector RepoInvitation)
 listInvitationsForR =
     pagedQuery ["user", "repository_invitations"] []
 
-acceptInvitationFromR :: Id RepoInvitation -> Request 'RW RepoInvitation
+
+-- | Accept a repository invitation
+-- See <https://developer.github.com/v3/repos/invitations/#accept-a-repository-invitation>
+acceptInvitationFromR :: Id RepoInvitation -> GenRequest 'MtUnit 'RW ()
 acceptInvitationFromR invId =
     Command Patch ["user", "repository_invitations", toPathPart invId] mempty
