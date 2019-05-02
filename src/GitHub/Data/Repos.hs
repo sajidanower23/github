@@ -58,7 +58,7 @@ data Repo = Repo
     , repoParent          :: !(Maybe RepoRef)
     , repoSource          :: !(Maybe RepoRef)
     , repoHooksUrl        :: !URL
-    , repoStargazersCount :: !(Maybe Int)
+    , repoStargazersCount :: !Int
     }
     deriving (Show, Data, Typeable, Eq, Ord, Generic)
 
