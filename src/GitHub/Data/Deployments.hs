@@ -12,6 +12,10 @@ module GitHub.Data.Deployments
     , CreateDeploymentStatus (..)
     ) where
 
+
+import GitHub.Internal.Prelude
+import Prelude ()
+
 import Control.Arrow (second)
 
 import Data.ByteString (ByteString)
@@ -24,11 +28,10 @@ import GitHub.Data.Definitions (SimpleUser)
 import GitHub.Data.Id          (Id)
 import GitHub.Data.Name        (Name)
 import GitHub.Data.URL         (URL)
-import GitHub.Internal.Prelude
 
 import qualified Data.Aeson         as JSON
-import qualified Data.Text          as Text
-import qualified Data.Text.Encoding as Text
+import qualified Data.Text          as T
+import qualified Data.Text.Encoding as T
 
 data DeploymentQueryOption
     = DeploymentQuerySha         !Text
@@ -42,7 +45,7 @@ instance Binary DeploymentQueryOption
 
 renderDeploymentQueryOption :: DeploymentQueryOption -> (ByteString, ByteString)
 renderDeploymentQueryOption =
-    second Text.encodeUtf8 . \case
+    second T.encodeUtf8 . \case
         DeploymentQuerySha         sha  -> ("sha",         sha)
         DeploymentQueryRef         ref  -> ("ref",         ref)
         DeploymentQueryTask        task -> ("task",        task)
@@ -172,13 +175,13 @@ instance ToJSON DeploymentStatusState where
         DeploymentStatusInactive -> "inactive"
 
 instance FromJSON DeploymentStatusState where
-    parseJSON = withText "GitHub DeploymentStatusState" $ \case
+    parseJSON = withText "DeploymentStatusState" $ \t -> case T.toLower t of
         "error"    -> pure DeploymentStatusError
         "failure"  -> pure DeploymentStatusFailure
         "pending"  -> pure DeploymentStatusPending
         "success"  -> pure DeploymentStatusSuccess
         "inactive" -> pure DeploymentStatusInactive
-        x          -> fail $ "Unknown deployment status: " ++ Text.unpack x
+        _          -> fail $ "Unknown DeploymentStatusState: " <> T.unpack t
 
 data CreateDeploymentStatus = CreateDeploymentStatus
     { createDeploymentStatusState       :: !DeploymentStatusState

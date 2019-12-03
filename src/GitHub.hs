@@ -6,19 +6,32 @@
 -- This module re-exports all request constructrors and data definitions from
 -- this package.
 --
--- See "GitHub.Request" module for executing 'Request', or other modules
--- of this package (e.g. "GitHub.Endpoints.Users") for already composed versions.
+-- See "GitHub.Request" module for executing 'Request', in short
+-- use @'github' request@, for example
+--
+-- @
+-- 'github' 'userInfoForR'
+--   :: 'AuthMethod' am => am -> 'Name' 'User' -> IO (Either 'Error' 'User')
+-- @
 --
 -- The missing endpoints lists show which endpoints we know are missing, there
 -- might be more.
+--
 module GitHub (
     -- * Activity
     -- | See <https://developer.github.com/v3/activity/>
 
     -- ** Events
-    -- | See https://developer.github.com/v3/activity/events/#events
+    -- | See <https://developer.github.com/v3/activity/events/>
     repositoryEventsR,
     userEventsR,
+
+    -- ** Notifications
+    -- | See <https://developer.github.com/v3/activity/notifications/>
+    getNotificationsR,
+    markNotificationAsReadR,
+    markAllNotificationsAsReadR,
+
     -- ** Starring
     -- | See <https://developer.github.com/v3/activity/starring/>
     --
@@ -139,11 +152,8 @@ module GitHub (
     --
     milestonesR,
     milestoneR,
-    createMilestone,
     createMilestoneR,
-    updateMilestone,
     updateMilestoneR,
-    deleteMilestone,
     deleteMilestoneR,
 
     -- * Organizations
@@ -224,14 +234,8 @@ module GitHub (
     -- * Submit a pull request review
     -- * Dismiss a pull request review
     pullRequestReviewsR,
-    pullRequestReviews,
-    pullRequestReviews',
     pullRequestReviewR,
-    pullRequestReview,
-    pullRequestReview',
     pullRequestReviewCommentsR,
-    pullRequestReviewCommentsIO,
-    pullRequestReviewCommentsIO',
 
     -- * Repositories
     -- | See <https://developer.github.com/v3/repos/>
@@ -276,6 +280,13 @@ module GitHub (
     commitR,
     diffR,
 
+    -- ** Deploy Keys
+    -- | See <https://developer.github.com/v3/repos/keys/>
+    deployKeysForR,
+    deployKeyForR,
+    createRepoDeployKeyR,
+    deleteRepoDeployKeyR,
+
     -- ** Deployments
     -- | See <https://developer.github.com/v3/repos/deployments/#deployments>
     --
@@ -311,6 +322,19 @@ module GitHub (
     releaseR,
     latestReleaseR,
     releaseByTagNameR,
+
+    -- ** Invitations
+    -- | See <https://developer.github.com/v3/repos/invitations/>
+    -- Missing endpoints:
+
+    -- * Delete a repository invitation
+    -- * Update a repository invitation
+    -- * Decline a repository invitation
+
+    listInvitationsOnR,
+    acceptInvitationFromR,
+    listInvitationsForR,
+
 
     -- * Search
     -- | See <https://developer.github.com/v3/search/>
@@ -374,6 +398,7 @@ module GitHub (
 
 import GitHub.Data
 import GitHub.Endpoints.Activity.Events
+import GitHub.Endpoints.Activity.Notifications
 import GitHub.Endpoints.Activity.Starring
 import GitHub.Endpoints.Activity.Watching
 import GitHub.Endpoints.Gists
@@ -398,8 +423,10 @@ import GitHub.Endpoints.Repos
 import GitHub.Endpoints.Repos.Collaborators
 import GitHub.Endpoints.Repos.Comments
 import GitHub.Endpoints.Repos.Commits
+import GitHub.Endpoints.Repos.DeployKeys
 import GitHub.Endpoints.Repos.Deployments
 import GitHub.Endpoints.Repos.Forks
+import GitHub.Endpoints.Repos.Invitations
 import GitHub.Endpoints.Repos.Releases
 import GitHub.Endpoints.Repos.Statuses
 import GitHub.Endpoints.Repos.Webhooks

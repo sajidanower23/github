@@ -1,9 +1,11 @@
-{-# LANGUAGE CPP                   #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE KindSignatures        #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE CPP                    #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE KindSignatures         #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE UndecidableInstances   #-}
 -----------------------------------------------------------------------------
 -- |
 -- License     :  BSD-3-Clause
@@ -29,6 +31,11 @@
 -- > githubRequest :: GH.Request 'False a -> GithubMonad a
 -- > githubRequest = singleton
 module GitHub.Request (
+    -- * A convinient execution of requests
+    github,
+    github',
+    GitHubRW,
+    GitHubRO,
     -- * Types
     Request,
     GenRequest (..),
@@ -51,6 +58,10 @@ module GitHub.Request (
     StatusMap,
     getNextUrl,
     performPagedRequest,
+    parseResponseJSON,
+    -- ** Preview
+    PreviewAccept (..),
+    PreviewParseResponse (..),
     ) where
 
 import GitHub.Internal.Prelude
@@ -63,18 +74,21 @@ import Control.Monad.Catch        (MonadCatch (..), MonadThrow)
 import Control.Monad.Trans.Class  (lift)
 import Control.Monad.Trans.Except (ExceptT (..), runExceptT)
 import Data.Aeson                 (eitherDecode)
-import Data.List                  (find)
+import Data.List                  (find, intercalate)
+import Data.String                (fromString)
 import Data.Tagged                (Tagged (..))
+import Data.Version               (showVersion)
 
 import Network.HTTP.Client
-       (HttpException (..), Manager, RequestBody (..), Response (..),
-       applyBasicAuth, getUri, httpLbs, method, newManager, redirectCount,
-       requestBody, requestHeaders, setQueryString, setRequestIgnoreStatus)
-import Network.HTTP.Client.TLS  (tlsManagerSettings)
+       (HttpException (..), Manager, RequestBody (..), Response (..), getUri,
+       httpLbs, method, newManager, redirectCount, requestBody, requestHeaders,
+       setQueryString, setRequestIgnoreStatus)
 import Network.HTTP.Link.Parser (parseLinkHeaderBS)
 import Network.HTTP.Link.Types  (Link (..), LinkParam (..), href, linkParams)
 import Network.HTTP.Types       (Method, RequestHeaders, Status (..))
-import Network.URI              (URI, parseURIReference, relativeTo)
+import Network.URI
+       (URI, escapeURIString, isUnescapedInURIComponent, parseURIReference,
+       relativeTo)
 
 import qualified Data.ByteString              as BS
 import qualified Data.ByteString.Lazy         as LBS
@@ -84,14 +98,102 @@ import qualified Data.Vector                  as V
 import qualified Network.HTTP.Client          as HTTP
 import qualified Network.HTTP.Client.Internal as HTTP
 
-import GitHub.Auth              (Auth (..))
+#ifdef MIN_VERSION_http_client_tls
+import Network.HTTP.Client.TLS (tlsManagerSettings)
+#else
+import Network.HTTP.Client.OpenSSL (opensslManagerSettings, withOpenSSL)
+
+import qualified OpenSSL.Session          as SSL
+import qualified OpenSSL.X509.SystemStore as SSL
+#endif
+
+import GitHub.Auth              (Auth, AuthMethod, endpoint, setAuthRequest)
 import GitHub.Data              (Error (..))
 import GitHub.Data.PullRequests (MergeResult (..))
 import GitHub.Data.Request
 
+import Paths_github (version)
+
+-------------------------------------------------------------------------------
+-- Convinience
+-------------------------------------------------------------------------------
+
+-- | A convinience function to turn functions returning @'Request' rw x@,
+-- into functions returning @IO (Either 'Error' x)@.
+--
+-- >>> :t \auth -> github auth userInfoForR
+-- \auth -> github auth userInfoForR
+--   :: AuthMethod am => am -> Name User -> IO (Either Error User)
+--
+-- >>> :t github pullRequestsForR
+-- \auth -> github auth pullRequestsForR
+--   :: AuthMethod am =>
+--      am
+--      -> Name Owner
+--      -> Name Repo
+--      -> PullRequestMod
+--      -> FetchCount
+--      -> IO (Either Error (Data.Vector.Vector SimplePullRequest))
+--
+github :: (AuthMethod am, GitHubRW req res) => am -> req -> res
+github = githubImpl
+
+-- | Like 'github'' but for 'RO' i.e. read-only requests.
+-- Note that GitHub has low request limit for non-authenticated requests.
+--
+-- >>> :t github' userInfoForR
+-- github' userInfoForR :: Name User -> IO (Either Error User)
+--
+github' :: GitHubRO req res => req -> res
+github' = githubImpl'
+
+-- | A type-class implementing 'github'.
+class GitHubRW req res | req -> res where
+    githubImpl :: AuthMethod am => am -> req -> res
+
+-- | A type-class implementing 'github''.
+class GitHubRO req res | req -> res where
+    githubImpl' :: req -> res
+
+instance (ParseResponse mt req, res ~ Either Error req) => GitHubRW (GenRequest mt rw req) (IO res) where
+    githubImpl = executeRequest
+
+instance (ParseResponse mt req, res ~ Either Error req, rw ~ 'RO) => GitHubRO (GenRequest mt rw req) (IO res) where
+    githubImpl' = executeRequest'
+
+instance GitHubRW req res => GitHubRW (a -> req) (a -> res) where
+    githubImpl am req x = githubImpl am (req x)
+
+instance GitHubRO req res => GitHubRO (a -> req) (a -> res) where
+    githubImpl' req x = githubImpl' (req x)
+
+-------------------------------------------------------------------------------
+-- Execution
+-------------------------------------------------------------------------------
+
+#ifdef MIN_VERSION_http_client_tls
+withOpenSSL :: IO a -> IO a
+withOpenSSL = id
+#else
+tlsManagerSettings :: HTTP.ManagerSettings
+tlsManagerSettings = opensslManagerSettings $ do
+    ctx <- SSL.context
+    SSL.contextAddOption ctx SSL.SSL_OP_NO_SSLv2
+    SSL.contextAddOption ctx SSL.SSL_OP_NO_SSLv3
+    SSL.contextAddOption ctx SSL.SSL_OP_NO_TLSv1
+    SSL.contextSetCiphers ctx "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256"
+    SSL.contextLoadSystemCerts ctx
+    SSL.contextSetVerificationMode ctx $ SSL.VerifyPeer True True Nothing
+    return ctx
+#endif
+
 -- | Execute 'Request' in 'IO'
-executeRequest :: ParseResponse mt a => Auth -> GenRequest mt rw a -> IO (Either Error a)
-executeRequest auth req = do
+executeRequest
+    :: (AuthMethod am, ParseResponse mt a)
+    => am
+    -> GenRequest mt rw a
+    -> IO (Either Error a)
+executeRequest auth req = withOpenSSL $ do
     manager <- newManager tlsManagerSettings
     executeRequestWithMgr manager auth req
 
@@ -101,9 +203,9 @@ lessFetchCount i (FetchAtLeast j) = i < fromIntegral j
 
 -- | Like 'executeRequest' but with provided 'Manager'.
 executeRequestWithMgr
-    :: ParseResponse mt a
+    :: (AuthMethod am, ParseResponse mt a)
     => Manager
-    -> Auth
+    -> am
     -> GenRequest mt rw a
     -> IO (Either Error a)
 executeRequestWithMgr mgr auth req = runExceptT $ do
@@ -129,7 +231,7 @@ executeRequestWithMgr mgr auth req = runExceptT $ do
 
 -- | Like 'executeRequest' but without authentication.
 executeRequest' :: ParseResponse mt a => GenRequest mt 'RO a -> IO (Either Error a)
-executeRequest' req = do
+executeRequest' req = withOpenSSL $ do
     manager <- newManager tlsManagerSettings
     executeRequestWithMgr' manager req
 
@@ -140,7 +242,7 @@ executeRequestWithMgr'
     -> GenRequest mt 'RO a
     -> IO (Either Error a)
 executeRequestWithMgr' mgr req = runExceptT $ do
-    httpReq <- makeHttpRequest Nothing req
+    httpReq <- makeHttpRequest (Nothing :: Maybe Auth) req
     performHttpReq httpReq req
   where
     httpLbs' :: HTTP.Request -> ExceptT Error IO (Response LBS.ByteString)
@@ -158,7 +260,11 @@ executeRequestWithMgr' mgr req = runExceptT $ do
 -- | Helper for picking between 'executeRequest' and 'executeRequest''.
 --
 -- The use is discouraged.
-executeRequestMaybe :: ParseResponse mt a => Maybe Auth -> GenRequest mt 'RO a -> IO (Either Error a)
+executeRequestMaybe
+    :: (AuthMethod am, ParseResponse mt a)
+    => Maybe am
+    -> GenRequest mt 'RO a
+    -> IO (Either Error a)
 executeRequestMaybe = maybe executeRequest' executeRequest
 
 -- | Partial function to drop authentication need.
@@ -171,15 +277,18 @@ unsafeDropAuthRequirements r             =
 -- Parse response
 -------------------------------------------------------------------------------
 
-class Accept (mt :: MediaType) where
+class Accept (mt :: MediaType *) where
     contentType :: Tagged mt BS.ByteString
     contentType = Tagged "application/json" -- default is JSON
 
     modifyRequest :: Tagged mt (HTTP.Request -> HTTP.Request)
     modifyRequest = Tagged id
 
-class Accept mt => ParseResponse (mt :: MediaType) a where
-    parseResponse :: MonadError Error m => HTTP.Request -> HTTP.Response LBS.ByteString -> Tagged mt (m a)
+class Accept mt => ParseResponse (mt :: MediaType *) a where
+    parseResponse
+        :: MonadError Error m
+        => HTTP.Request -> HTTP.Response LBS.ByteString
+        -> Tagged mt (m a)
 
 -------------------------------------------------------------------------------
 -- JSON (+ star)
@@ -251,6 +360,29 @@ parseRedirect originalUri rsp = do
     noLocation = throwError $ ParseError "no location header in response"
 
 -------------------------------------------------------------------------------
+-- Extension point
+-------------------------------------------------------------------------------
+
+class PreviewAccept p where
+    previewContentType :: Tagged ('MtPreview p) BS.ByteString
+
+    previewModifyRequest :: Tagged ('MtPreview p) (HTTP.Request -> HTTP.Request)
+    previewModifyRequest = Tagged id
+
+class PreviewAccept p => PreviewParseResponse p a where
+    previewParseResponse
+        :: MonadError Error m
+        => HTTP.Request -> HTTP.Response LBS.ByteString
+        -> Tagged ('MtPreview p) (m a)
+
+instance PreviewAccept p => Accept ('MtPreview p) where
+    contentType   = previewContentType
+    modifyRequest = previewModifyRequest
+
+instance PreviewParseResponse p a => ParseResponse ('MtPreview p) a where
+    parseResponse = previewParseResponse
+
+-------------------------------------------------------------------------------
 -- Status
 -------------------------------------------------------------------------------
 
@@ -293,7 +425,11 @@ parseStatus m (Status sci _) =
 -- Unit
 -------------------------------------------------------------------------------
 
-instance Accept 'MtUnit
+-- | Note: we don't ignore response status.
+--
+-- We only accept any response body.
+instance Accept 'MtUnit where
+
 instance a ~ () => ParseResponse 'MtUnit a where
     parseResponse _ _ = Tagged (return ())
 
@@ -308,8 +444,8 @@ instance a ~ () => ParseResponse 'MtUnit a where
 --   status checking is modifying accordingly.
 --
 makeHttpRequest
-    :: forall mt rw a m. (MonadThrow m, Accept mt)
-    => Maybe Auth
+    :: forall am mt rw a m. (AuthMethod am, MonadThrow m, Accept mt)
+    => Maybe am
     -> GenRequest mt rw a
     -> m HTTP.Request
 makeHttpRequest auth r = case r of
@@ -318,7 +454,7 @@ makeHttpRequest auth r = case r of
         return
             $ setReqHeaders
             . unTagged (modifyRequest :: Tagged mt (HTTP.Request -> HTTP.Request))
-            . setAuthRequest auth
+            . maybe id setAuthRequest auth
             . setQueryString qs
             $ req
     PagedQuery paths qs _ -> do
@@ -326,7 +462,7 @@ makeHttpRequest auth r = case r of
         return
             $ setReqHeaders
             . unTagged (modifyRequest :: Tagged mt (HTTP.Request -> HTTP.Request))
-            . setAuthRequest auth
+            . maybe id setAuthRequest auth
             . setQueryString qs
             $ req
     Command m paths body -> do
@@ -334,21 +470,17 @@ makeHttpRequest auth r = case r of
         return
             $ setReqHeaders
             . unTagged (modifyRequest :: Tagged mt (HTTP.Request -> HTTP.Request))
-            . setAuthRequest auth
+            . maybe id setAuthRequest auth
             . setBody body
             . setMethod (toMethod m)
             $ req
   where
-    parseUrl' :: MonadThrow m => Text -> m HTTP.Request
-    parseUrl' = HTTP.parseRequest . T.unpack
+    parseUrl' :: MonadThrow m => String -> m HTTP.Request
+    parseUrl' = HTTP.parseUrlThrow
 
-    url :: Paths -> Text
-    url paths = baseUrl <> "/" <> T.intercalate "/" paths
-
-    baseUrl :: Text
-    baseUrl = case auth of
-        Just (EnterpriseOAuth endpoint _)  -> endpoint
-        _                                  -> "https://api.github.com"
+    url :: Paths -> String
+    url paths = maybe "https://api.github.com" T.unpack (endpoint =<< auth) ++ "/" ++ intercalate "/" paths' where
+        paths' = map (escapeURIString isUnescapedInURIComponent . T.unpack) paths
 
     setReqHeaders :: HTTP.Request -> HTTP.Request
     setReqHeaders req = req { requestHeaders = reqHeaders <> requestHeaders req }
@@ -357,21 +489,11 @@ makeHttpRequest auth r = case r of
     setMethod m req = req { method = m }
 
     reqHeaders :: RequestHeaders
-    reqHeaders = maybe [] getOAuthHeader auth
-        <> [("User-Agent", "github.hs/0.21")] -- Version
+    reqHeaders = [("User-Agent", "github.hs/" <> fromString (showVersion version))] -- Version
         <> [("Accept", unTagged (contentType :: Tagged mt BS.ByteString))]
 
     setBody :: LBS.ByteString -> HTTP.Request -> HTTP.Request
     setBody body req = req { requestBody = RequestBodyLBS body }
-
-    setAuthRequest :: Maybe Auth -> HTTP.Request -> HTTP.Request
-    setAuthRequest (Just (BasicAuth user pass)) = applyBasicAuth user pass
-    setAuthRequest _                            = id
-
-    getOAuthHeader :: Auth -> RequestHeaders
-    getOAuthHeader (OAuth token)             = [("Authorization", "token " <> token)]
-    getOAuthHeader (EnterpriseOAuth _ token) = [("Authorization", "token " <> token)]
-    getOAuthHeader _                         = []
 
 -- | Query @Link@ header with @rel=next@ from the request headers.
 getNextUrl :: Response a -> Maybe URI

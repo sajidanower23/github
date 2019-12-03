@@ -1,4 +1,58 @@
-## Changes for next
+## Changes for 0.24
+
+**Major change**:
+Introduce `github` n-ary combinator to hoist `... -> Request rw res`
+into `... -> IO (Either Error res)` (i.e. n-ary `executeRequest`).
+With that in place drop `.. -> IO (Either Error res)` functions.
+
+This reduces symbol bloat in the library.
+[#415](https://github.com/phadej/github/pull/415)
+
+- Remove double `withOpenSSL`
+  [#414](https://github.com/phadej/github/pull/414)
+- Pull requests reviews API uses issue number
+  [#409](https://github.com/phadej/github/pull/409)
+- Update `Repo`, `NewRepo` and `EditRepo` data types
+  [#407](https://github.com/phadej/github/pull/407)
+
+## Changes for 0.23
+
+- Escape URI paths
+  [#404](https://github.com/phadej/github/pull/404)
+- Add OwnerBot to OwnerType
+  [#399](https://github.com/phadej/github/pull/399)
+- Make File.fileSha optional
+  [#392](https://github.com/phadej/github/pull/392)
+- Update User-Agent to contain up to date version
+  [#403](https://github.com/phadej/github/pull/403)
+  [#394](https://github.com/phadej/github/pull/394)
+
+## Changes for 0.22
+
+- Type-class for various auth methods
+  [#365](https://github.com/phadej/github/pull/365)
+- Throw on non-200 responses
+  [#350](https://github.com/phadej/github/pull/350)
+- Add extension point for (preview) media types
+  [#370](https://github.com/phadej/github/pull/370)
+- Add missing webhook event types
+  [#359](https://github.com/phadej/github/pull/359)
+- Add invitation endpoint
+  [#360](https://github.com/phadej/github/pull/360)
+- Add notifications endpoints
+  [#324](https://github.com/phadej/github/pull/324)
+- Add ssh keys endpoints
+  [#363](https://github.com/phadej/github/pull/365)
+- Case insensitive enum parsing
+  [#373](https://github.com/phadej/github/pull/373)
+- Don't try parse unitary responses
+  [#377](https://github.com/phadej/github/issues/377)
+- Update dependencies
+  [#364](https://github.com/phadej/github/pull/364)
+  [#368](https://github.com/phadej/github/pull/368)
+  [#369](https://github.com/phadej/github/pull/369)
+- Documentation improvements
+  [#357](https://github.com/phadej/github/pull/357)
 
 ## Changes for 0.21
 
@@ -56,7 +110,7 @@
 
 ## Changes for 0.18
 
-- Endpoints for deleting issue comments. 
+- Endpoints for deleting issue comments.
   [#294](https://github.com/phadej/github/pull/294)
 - Endpoints for (un)starring gists.
   [#296](https://github.com/phadej/github/pull/296)

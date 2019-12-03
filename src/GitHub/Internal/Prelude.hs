@@ -22,6 +22,7 @@ module GitHub.Internal.Prelude (
     Semigroup(..),
     -- * Aeson
     FromJSON(..), ToJSON(..), Value(..), Object,
+    emptyObject,
     encode,
     withText, withObject, (.:), (.:?), (.!=), (.=), object, typeMismatch,
     -- * Control.Applicative
@@ -40,9 +41,9 @@ import Control.DeepSeq.Generics (genericRnf)
 import Data.Aeson
        (FromJSON (..), Object, ToJSON (..), Value (..), encode, object,
        withObject, withText, (.!=), (.:), (.:?), (.=))
-import Data.Aeson.Types         (typeMismatch)
+import Data.Aeson.Types         (emptyObject, typeMismatch)
 import Data.Binary              (Binary)
-import Data.Binary.Orphans ()
+import Data.Binary.Instances ()
 import Data.Data                (Data, Typeable)
 import Data.Foldable            (toList)
 import Data.Hashable            (Hashable (..))

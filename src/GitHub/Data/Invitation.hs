@@ -8,8 +8,12 @@ module GitHub.Data.Invitation where
 import GitHub.Data.Definitions
 import GitHub.Data.Id          (Id)
 import GitHub.Data.Name        (Name)
+import GitHub.Data.Repos       (Repo)
+import GitHub.Data.URL         (URL)
 import GitHub.Internal.Prelude
 import Prelude ()
+
+import qualified Data.Text as T
 
 data Invitation = Invitation
     { invitationId        :: !(Id Invitation)
@@ -48,10 +52,36 @@ instance NFData InvitationRole where rnf = genericRnf
 instance Binary InvitationRole
 
 instance FromJSON InvitationRole where
-    parseJSON = withText "InvirationRole" $ \t -> case t of
+    parseJSON = withText "InvitationRole" $ \t -> case T.toLower t of
         "direct_member"   -> pure InvitationRoleDirectMember
         "admin"           -> pure InvitationRoleAdmin
         "billing_manager" -> pure InvitationRoleBillingManager
         "hiring_manager"  -> pure InvitationRoleHiringManager
         "reinstate"       -> pure InvitationRoleReinstate
-        _                 -> fail $ "Invalid role " ++ show t
+        _                 -> fail $ "Unknown InvitationRole: " <> T.unpack t
+
+data RepoInvitation = RepoInvitation
+    { repoInvitationId         :: !(Id RepoInvitation)
+    , repoInvitationInvitee    :: !SimpleUser
+    , repoInvitationInviter    :: !SimpleUser
+    , repoInvitationRepo       :: !Repo
+    , repoInvitationUrl        :: !URL
+    , repoInvitationCreatedAt  :: !UTCTime
+    , repoInvitationPermission :: !Text
+    , repoInvitationHtmlUrl    :: !URL
+    }
+  deriving (Show, Data, Typeable, Eq, Ord, Generic)
+
+instance NFData RepoInvitation where rnf = genericRnf
+instance Binary RepoInvitation
+
+instance FromJSON RepoInvitation where
+    parseJSON = withObject "RepoInvitation" $ \o -> RepoInvitation
+        <$> o .: "id"
+        <*> o .: "invitee"
+        <*> o .: "inviter"
+        <*> o .: "repository"
+        <*> o .: "url"
+        <*> o .: "created_at"
+        <*> o .: "permissions"
+        <*> o .: "html_url"
